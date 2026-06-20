@@ -1,0 +1,29 @@
+# --- Secrets (NEVER commit) ---
+.env
+.env.*
+!.env.example
+
+# --- Python / backend (ml/) ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+*.pkl
+.ipynb_checkpoints/
+
+# --- Node / frontend ---
+node_modules/
+.next/
+out/
+build/
+dist/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# --- Editor / OS ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
