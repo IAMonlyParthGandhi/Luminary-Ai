@@ -25,9 +25,9 @@ The frontend should now be running on `http://localhost:3000`.
 
 ### Backend (AI Services) Setup
 
-1. Navigate to the backend directory (assuming it's named `ml`):
+1. Navigate to the backend directory:
    ```sh
-   cd ml
+   cd backend
    ```
 2. (Optional) Create a virtual environment:
    ```sh
@@ -42,7 +42,7 @@ The frontend should now be running on `http://localhost:3000`.
    - Go to [https://console.groq.com/keys](https://console.groq.com/keys)
    - Log in or sign up
    - Generate an API Key
-   - Store it in `/ml/.env` by creating a `.env` file and adding:
+   - Store it in `/backend/.env` by creating a `.env` file and adding:
      ```
      GROQ_API_KEY=your_generated_key
      ```

@@ -1,5 +1,5 @@
-import AgentRow from '@/components/ChatbotCard'
-import Navbar from '@/components/Navbar'
+import AgentRow from '@/components/chat/ChatbotCard'
+import Navbar from '@/components/layout/Navbar'
 import React from 'react'
 
 const page = () => {

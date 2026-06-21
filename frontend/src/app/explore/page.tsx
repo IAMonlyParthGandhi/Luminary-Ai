@@ -1,6 +1,6 @@
-import Chatbot from '@/components/ChatbotSmall'
-import CompanyInput from '@/components/CompanyInput'
-import Navbar from '@/components/Navbar'
+import Chatbot from '@/components/chat/ChatbotSmall'
+import CompanyInput from '@/components/company/CompanyInput'
+import Navbar from '@/components/layout/Navbar'
 import React from 'react'
 
 const page = () => {

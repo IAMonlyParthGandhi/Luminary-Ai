@@ -1,5 +1,5 @@
-import Navbar from '@/components/Navbar'
-import SeoGenerator from '@/components/StartForm'
+import Navbar from '@/components/layout/Navbar'
+import SeoGenerator from '@/components/build/StartForm'
 import React from 'react'
 
 const page = () => {

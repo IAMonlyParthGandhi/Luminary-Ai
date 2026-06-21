@@ -1,5 +1,5 @@
-import ChatPage from '@/components/Chatbot'
-import Navbar from '@/components/Navbar'
+import ChatPage from '@/components/chat/Chatbot'
+import Navbar from '@/components/layout/Navbar'
 import React from 'react'
 
 const page = () => {

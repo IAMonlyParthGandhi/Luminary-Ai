@@ -1,4 +1,4 @@
-import BrandLogos from '@/components/Sponsors'
+import BrandLogos from '@/components/home/Sponsors'
 import React from 'react'
 
 const page = () => {

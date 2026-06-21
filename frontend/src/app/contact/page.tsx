@@ -1,7 +1,7 @@
 'use client'
-import Contact from '@/components/ContactUs'
-import Footer from '@/components/Footer'
-import Navbar from '@/components/Navbar'
+import Contact from '@/components/contact/ContactUs'
+import Footer from '@/components/layout/Footer'
+import Navbar from '@/components/layout/Navbar'
 import React from 'react'
 
 const page = () => {
