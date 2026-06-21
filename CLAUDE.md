@@ -4,8 +4,8 @@
 > etc.) to give it full context on this repo in the fewest tokens — it replaces pasting
 > source code. Everything here was verified against the actual source on **2026-06-20**.
 >
-> **Companion file:** [ChangesNeeded.md](ChangesNeeded.md) — the prioritized, detailed list
-> of fixes/changes to make in the current version (security, bugs, missing features, roadmap).
+> **Companion file:** [ROADMAP.md](ROADMAP.md) — the run-first, phased plan with detailed,
+> executable steps for every fix/change (issue → how to solve → impact).
 >
 > **Heads-up:** The owner intends to rebuild the *idea, ML, and backend* largely **from
 > scratch**. Treat the backend specifics below as the *current* state to learn from and
@@ -25,7 +25,7 @@
 | **Origin** | DotSlash Hackathon (ACM + SVNIT + ASHINE Incubation Cell) |
 | **Shape** | Monorepo: **Next.js** frontend (`frontend/`) + **FastAPI** backend (`ml/`) wrapping **Groq** LLMs, a **Pinecone** vector store, and **LangChain** RAG. |
 | **Deploy** | Frontend → Vercel · Backend → Render free tier (cold-start issue) |
-| **Backend live URL** | `https://dotslash-backend.onrender.com` (hardcoded in frontend — see ChangesNeeded #5) |
+| **Backend live URL** | `https://dotslash-backend.onrender.com` (hardcoded in frontend — see ROADMAP 0.5) |
 
 > The team also calls the backend "DotSlash"; the Render URL reflects that.
 
@@ -67,8 +67,7 @@ lists `langchain-pinecone` twice.
 Luminary-Ai/
 ├── README.md                 # Setup guide — ⚠️ backend run cmd is WRONG (says main:app)
 ├── CLAUDE.md                 # ← this file (consolidated context)
-├── ChangesNeeded.md          # prioritized fixes / changes for the current version
-├── ROADMAP.md                # (leftover gen artifact — folded into ChangesNeeded.md)
+├── ROADMAP.md                # run-first phased plan: issue → how to solve → impact
 ├── PromptForContextGathering.md  # (leftover meta-prompt to regenerate docs)
 │
 ├── frontend/                 # Next.js 15 app
@@ -124,10 +123,9 @@ Luminary-Ai/
         └── prompt.py                 # system prompts (medical + marketing)
 ```
 
-> ⚠️ **There is no `.gitignore`** in the repo as of writing (a root one was just added — see
-> ChangesNeeded "Already done"). `ml/.env`, virtualenvs, and `__pycache__` were committed in
-> the past; they are no longer in the working tree but **the leaked keys remain in git
-> history**. See ChangesNeeded §A.
+> ⚠️ A root `.gitignore` now covers `.env`, virtualenvs, `__pycache__`, `node_modules`, build
+> output, etc. `ml/.env`, virtualenvs, and `__pycache__` were committed in the past; they are no
+> longer in the working tree but **the leaked keys remain in git history**. See ROADMAP 1.1.
 
 ---
 
@@ -228,7 +226,7 @@ SMTP_PASSWORD=     # Gmail app password
 
 > 🔴 **Security:** real keys (Pinecone, OpenAI, HuggingFace, Groq, Replicate) were committed in
 > `ml/.env` in earlier commits and **still live in git history**. Rotate all + scrub history.
-> See ChangesNeeded §A.
+> See ROADMAP 1.1.
 
 ---
 
@@ -252,7 +250,7 @@ uvicorn server:app --host 0.0.0.0 --port 8000 --reload   # NOT main:app
 
 > ⚠️ README says `uvicorn main:app` — **wrong**, there is no `main.py`; the entry is `server.py`.
 > ⚠️ The frontend hardcodes the Render URL, so a local backend isn't hit unless you change those
-> URLs (ChangesNeeded #5). No test suite, no CI.
+> URLs (ROADMAP 0.5). No test suite, no CI.
 > ⚠️ RAG chatbots need pre-populated Pinecone indexes (`chatbot1`, `chatbot2`); no ingestion
 > script ships in the repo.
 
@@ -309,9 +307,9 @@ serverless. No GPU (all inference via Groq cloud).
 
 ---
 
-## 12. Known Issues → see [ChangesNeeded.md](ChangesNeeded.md)
+## 12. Known Issues → see [ROADMAP.md](ROADMAP.md)
 
-Top risks (full detail + fixes in ChangesNeeded.md):
+Top risks (full detail + executable fixes in ROADMAP.md):
 1. 🔴 **Leaked API keys in git history** (`ml/.env`) — rotate all + scrub history.
 2. 🟠 **CORS** `*` + credentials — invalid/insecure.
 3. 🟠 **No auth/rate-limit** on paid LLM endpoints — cost & abuse risk.
