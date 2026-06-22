@@ -2,14 +2,14 @@
 
 > **What this file is:** The single document to paste into any AI assistant (Claude, GPT,
 > etc.) to give it full context on this repo in the fewest tokens — it replaces pasting
-> source code. Everything here was verified against the actual source on **2026-06-20**.
+> source code. Verified against the actual source on **2026-06-21** (post-restructure).
 >
 > **Companion file:** [ROADMAP.md](ROADMAP.md) — the run-first, phased plan with detailed,
 > executable steps for every fix/change (issue → how to solve → impact).
 >
-> **Heads-up:** The owner intends to rebuild the *idea, ML, and backend* largely **from
-> scratch**. Treat the backend specifics below as the *current* state to learn from and
-> carry forward — not a contract to preserve.
+> **Heads-up:** The repo was just **restructured** (backend `ml/` → `backend/app/` package;
+> frontend components regrouped into feature folders) with all logic preserved. The owner may
+> still rework the *idea/ML* later; treat the specifics below as the current, post-refactor state.
 
 ---
 
@@ -23,9 +23,9 @@
 | **Author** | Parth Gandhi, B.Tech CSE, SVNIT Surat |
 | **Team** | "404 Not Found" |
 | **Origin** | DotSlash Hackathon (ACM + SVNIT + ASHINE Incubation Cell) |
-| **Shape** | Monorepo: **Next.js** frontend (`frontend/`) + **FastAPI** backend (`ml/`) wrapping **Groq** LLMs, a **Pinecone** vector store, and **LangChain** RAG. |
+| **Shape** | Monorepo: **Next.js** frontend (`frontend/`) + **FastAPI** backend (`backend/`) wrapping **Groq** LLMs, a **Pinecone** vector store, and **LangChain** RAG. |
 | **Deploy** | Frontend → Vercel · Backend → Render free tier (cold-start issue) |
-| **Backend live URL** | `https://dotslash-backend.onrender.com` (hardcoded in frontend — see ROADMAP 0.5) |
+| **Backend live URL** | `https://dotslash-backend.onrender.com` (now configurable via `NEXT_PUBLIC_API_URL` — see ROADMAP 0.5) |
 
 > The team also calls the backend "DotSlash"; the Render URL reflects that.
 
@@ -44,20 +44,19 @@
 | Auth (client) | Firebase Auth (Email/pw, Google, GitHub providers) | `firebase ^11.2.0` |
 | Email | Nodemailer + Handlebars (Gmail SMTP) | `nodemailer ^6.10.0` |
 | Markdown | react-markdown | `^9.0.3` |
-| Dead weight | `react-router-dom` (installed, unused — Next handles routing) | — |
 
-**Backend (`ml/`)** — ⚠️ **all Python deps are unpinned** (no `==`), and `requirements.txt`
-lists `langchain-pinecone` twice.
+**Backend (`backend/`)** — ⚠️ **all Python deps are still unpinned** (no `==`); the refactor
+removed the duplicate `langchain-pinecone` line and the unused deps.
 | Layer | Tech |
 |---|---|
 | Framework | FastAPI (`fastapi[all]`) |
 | LLM — primary | Groq `llama-3.3-70b-versatile` (company info, SWOT, taglines, SEO) |
 | LLM — chatbots | Groq `deepseek-r1-distill-llama-70b` (`<think>` tags stripped) |
 | Embeddings | `sentence-transformers/all-MiniLM-L6-v2` (384-D, local HF) |
-| Vector DB | Pinecone — indexes `chatbot1` (medical), `chatbot2` (marketing) |
-| RAG | LangChain (community/groq/pinecone/openai/experimental) |
-| Config | `python-dotenv` (`ml/.env`) |
-| Present but unused | `OPENAI_API_KEY`, `REPLICATE_API_TOKEN`, `langchain-openai`, `pandas`, `pypdf` |
+| Vector DB | Pinecone — indexes `chatbot1`, `chatbot2` (one merged RAG service serves both) |
+| RAG | LangChain (community/groq/pinecone) |
+| Config | `python-dotenv` (`backend/.env`); `backend/.env.example` committed |
+| Removed in refactor | duplicate `langchain-pinecone`, `langchain-openai`, `langchain-experimental`, `pandas`, `pypdf`, `react-router-dom`, scratch notebooks, `egg-info/`, `model.pkl` |
 
 ---
 
@@ -65,67 +64,66 @@ lists `langchain-pinecone` twice.
 
 ```
 Luminary-Ai/
-├── README.md                 # Setup guide — ⚠️ backend run cmd is WRONG (says main:app)
+├── README.md                 # Setup guide (now correct: `cd backend`, `uvicorn main:app`)
 ├── CLAUDE.md                 # ← this file (consolidated context)
 ├── ROADMAP.md                # run-first phased plan: issue → how to solve → impact
 ├── PromptForContextGathering.md  # (leftover meta-prompt to regenerate docs)
 │
 ├── frontend/                 # Next.js 15 app
 │   └── src/
-│       ├── app/              # App Router pages
+│       ├── app/              # App Router pages (route filenames fixed by Next.js)
 │       │   ├── page.tsx          # Home (Navbar, Hero, Work, Sponsors, Footer)
 │       │   ├── build/page.tsx    # SEO + tagline generator (StartForm)
 │       │   ├── chat/page.tsx     # Full-page chatbot (Chatbot)
 │       │   ├── explore/page.tsx  # Company research (CompanyInput + ChatbotSmall)
 │       │   ├── sectors/page.tsx  # Agent showcase (ChatbotCard)
 │       │   ├── signin|signup/    # Firebase auth pages
-│       │   ├── contact|team|sponsors|test/
+│       │   ├── contact|team|sponsors/
 │       │   ├── layout.tsx        # Root layout, Geist font
 │       │   └── globals.css
-│       ├── components/       # Feature + UI components
-│       │   ├── Analysis.tsx        → POST /companies-analysis (SWOT)
-│       │   ├── CompanyInput.tsx    → GET /company
-│       │   ├── Chatbot.tsx         → POST /medical-bot (RAG chat, full page)
-│       │   ├── ChatbotSmall.tsx    → POST /marketing-bot (floating widget, 600px)
-│       │   ├── StartForm.tsx       → GET /seo + POST /tagline-generator
-│       │   ├── SWOTAnaylis.tsx     # SWOT display (NOTE: filename typo, missing 'y')
-│       │   ├── ChatbotCard.tsx, MultiStepLoader.tsx, Hero.tsx, Navbar.tsx,
-│       │   │   Footer.tsx, Work.tsx, Sponsors.tsx, Signin.tsx, Signup.tsx,
-│       │   │   ContactUs.tsx, Team.tsx, DottedText.tsx, ScrollButton.tsx …
-│       │   └── ui/                 # shadcn primitives (button, card, input, label, alert, scroll-area)
+│       ├── components/       # grouped by feature
+│       │   ├── layout/   # Navbar, Footer
+│       │   ├── home/     # Hero, Work, Sponsors, DotMatrixText
+│       │   ├── company/  # CompanyInput (→ GET /company), Analysis (→ POST /companies-analysis, SWOT inline), MultiStepLoader
+│       │   ├── build/    # StartForm (→ GET /seo + POST /tagline-generator)
+│       │   ├── chat/     # Chatbot (→ /medical-bot), ChatbotSmall (→ /marketing-bot), ChatbotCard
+│       │   ├── auth/     # Signin, Signup
+│       │   ├── contact/  # ContactUs, Team
+│       │   └── ui/       # shadcn primitives (button, card, input, label, alert, scroll-area)
 │       ├── hooks/sendMail.tsx      # server action → lib/mail.ts (to mjgandhi2305@gmail.com)
 │       └── lib/
+│           ├── api.ts              # API_BASE_URL (NEXT_PUBLIC_API_URL ?? localhost:8000) — single source of truth
 │           ├── firebase.ts         # auth + Google/GitHub providers (NEXT_PUBLIC_* vars)
 │           ├── mail.ts             # Nodemailer Gmail SMTP
 │           ├── templates/welcome.ts
 │           └── utils.ts            # cn() Tailwind merge
 │
-└── ml/                       # FastAPI backend (entry: server.py — NOT main.py)
-    ├── server.py             # App, CORS(*), /api/home, /company, /companies-analysis; mounts routers
-    ├── config.py             # loads GROQ_API_KEY from env
-    ├── companies.py          # get_company_info() — company + 5 competitors (Groq)
-    ├── analysis.py           # companies_analysis() — SWOT for first 3 companies (Groq)
-    ├── requirements.txt      # unpinned deps (+ duplicate langchain-pinecone)
-    ├── 1.ipynb, companies.ipynb   # dev/scratch notebooks (not part of the app)
-    ├── routes/
-    │   ├── chat_routes.py            # POST /medical-bot
-    │   ├── marketing_chatbot_routes.py # POST /marketing-bot
-    │   ├── generate_taglines.py      # POST /tagline-generator
-    │   └── seo_routes.py             # GET  /seo
-    ├── services/
-    │   ├── chat_service.py           # RAG: Pinecone chatbot1 + Groq deepseek; strips <think>
-    │   ├── marketing_chatbot_service.py # RAG: Pinecone chatbot2
-    │   ├── generate_taglines.py
-    │   ├── seo_service.py            # get_company_info → 10 SEO keywords
-    │   └── model.pkl                 # shipped pickle (provenance UNKNOWN)
-    └── chat/src/
-        ├── helper.py                 # download_hugging_face_embeddings()
-        └── prompt.py                 # system prompts (medical + marketing)
+└── backend/                  # FastAPI backend (entry: backend/main.py → `uvicorn main:app`)
+    ├── main.py               # App, CORS(*), GET /api/home; mounts the 4 routers
+    ├── requirements.txt      # unpinned deps (duplicate + unused removed)
+    ├── .env.example          # GROQ / PINECONE / HUGGINGFACEHUB placeholders
+    └── app/
+        ├── config.py         # loads GROQ_API_KEY, PINECONE_API_KEY, HUGGINGFACEHUB_API_TOKEN
+        ├── core/
+        │   ├── groq.py       # shared Groq client (getClient) + parseJson() helper
+        │   ├── embeddings.py # downloadHuggingFaceEmbeddings()
+        │   └── prompts.py    # CHATBOT_SYSTEM_PROMPT (one prompt, both bots)
+        ├── routers/
+        │   ├── company.py    # GET /company + POST /companies-analysis
+        │   ├── chat.py       # POST /medical-bot + POST /marketing-bot
+        │   ├── taglines.py   # POST /tagline-generator
+        │   └── seo.py        # GET  /seo
+        └── services/
+            ├── company.py    # getCompanyInfo() — company + 5 competitors (Groq)
+            ├── analysis.py   # companiesAnalysis() — SWOT for first 3 companies (Groq)
+            ├── chat.py       # MERGED RAG: getChatResponse(msg, domain); Pinecone + Groq deepseek; strips <think>
+            ├── taglines.py   # generateTaglines() — 5 names + taglines (Groq)
+            └── seo.py        # getSeo() — 10 SEO keywords (Groq)
 ```
 
-> ⚠️ A root `.gitignore` now covers `.env`, virtualenvs, `__pycache__`, `node_modules`, build
-> output, etc. `ml/.env`, virtualenvs, and `__pycache__` were committed in the past; they are no
-> longer in the working tree but **the leaked keys remain in git history**. See ROADMAP 1.1.
+> ⚠️ A root `.gitignore` covers `.env`, virtualenvs, `__pycache__`, `node_modules`, build output,
+> etc. `ml/.env`, virtualenvs, and `__pycache__` were committed in the past; they are no longer in
+> the working tree but **the leaked keys remain in git history** (old path `ml/.env`). See ROADMAP 1.1.
 
 ---
 
@@ -133,18 +131,20 @@ Luminary-Ai/
 
 ```
 Browser (Next.js, :3000)
-   │  fetch() → hardcoded https://dotslash-backend.onrender.com  (or :8000 locally)
+   │  fetch() → API_BASE_URL (lib/api.ts): NEXT_PUBLIC_API_URL or http://localhost:8000
    ▼
-FastAPI (ml/server.py, :8000)
+FastAPI (backend/main.py, :8000)
    ├─ GET  /api/home          → inline {message, team}
-   ├─ GET  /company           → companies.get_company_info()   → Groq llama-3.3-70b
-   ├─ POST /companies-analysis→ analysis.companies_analysis()  → Groq llama-3.3-70b (SWOT, first 3)
-   ├─ POST /medical-bot       → chat_service                   → RAG: Pinecone(chatbot1)
+   ├─ GET  /company           → services.company.getCompanyInfo()       → Groq llama-3.3-70b
+   ├─ POST /companies-analysis→ services.analysis.companiesAnalysis()   → Groq llama-3.3-70b (SWOT, first 3)
+   ├─ POST /medical-bot       → services.chat.getChatResponse(_, "medical")   → RAG: Pinecone(chatbot1)
    │                                                              + HF embeddings + Groq deepseek
-   ├─ POST /marketing-bot     → marketing_chatbot_service      → RAG: Pinecone(chatbot2)
-   ├─ POST /tagline-generator → services.generate_taglines     → Groq
-   └─ GET  /seo               → services.seo_service           → Groq
+   ├─ POST /marketing-bot     → services.chat.getChatResponse(_, "marketing") → RAG: Pinecone(chatbot2)
+   ├─ POST /tagline-generator → services.taglines.generateTaglines()    → Groq
+   └─ GET  /seo               → services.seo.getSeo()                   → Groq
 
+Both chatbots share ONE service (services/chat.py), differing only by Pinecone index.
+Company/analysis/taglines/seo share core/groq.py (client + JSON parsing).
 Firebase Auth (client-side ONLY): Email/pw + Google (+ GitHub provider configured, no button).
 Email: lib/mail.ts (Nodemailer + Handlebars) → contact form → mjgandhi2305@gmail.com.
 ```
@@ -165,13 +165,13 @@ Email: lib/mail.ts (Nodemailer + Handlebars) → contact form → mjgandhi2305@g
 
 | Method | Path | Request | Calls | Notes |
 |---|---|---|---|---|
-| GET | `/api/home` | — | inline | Health/hello + team names `['Vatsal','Miten','Laskhit']` |
-| GET | `/company` | `?company`, `?location` | `companies.get_company_info` | Company + 5 competitors JSON. **Bare `except` returns `{error: str(e)}` with HTTP 200** |
-| POST | `/companies-analysis` | JSON body (company info) | `analysis.companies_analysis` | SWOT for **first 3** companies; raises `HTTPException(400)` on error |
-| POST | `/medical-bot` | `{ "msg": str }` | `chat_service.get_chat_response` | RAG over Pinecone `chatbot1` (medical) |
-| POST | `/marketing-bot` | `{ "msg": str }` | `marketing_chatbot_service` | RAG over Pinecone `chatbot2` (marketing) |
-| POST | `/tagline-generator` | `{ company_description, company_sector }` | `services.generate_taglines` | 5 names + taglines |
-| GET | `/seo` | `?company_description`, `?location` | `services.seo_service.get_seo` | 10 SEO keywords |
+| GET | `/api/home` | — | inline (`main.py`) | Health/hello + team names `['Vatsal','Miten','Laskhit']` |
+| GET | `/company` | `?company`, `?location` | `services.company.getCompanyInfo` | Company + 5 competitors JSON. **Bare `except` returns `{error: str(e)}` with HTTP 200** (`routers/company.py`) |
+| POST | `/companies-analysis` | JSON body (company info) | `services.analysis.companiesAnalysis` | SWOT for **first 3** companies; raises `HTTPException(400)` on error |
+| POST | `/medical-bot` | `{ "msg": str }` | `services.chat.getChatResponse(_, "medical")` | RAG over Pinecone `chatbot1` |
+| POST | `/marketing-bot` | `{ "msg": str }` | `services.chat.getChatResponse(_, "marketing")` | RAG over Pinecone `chatbot2` |
+| POST | `/tagline-generator` | `{ company_description, company_sector }` | `services.taglines.generateTaglines` | 5 names + taglines |
+| GET | `/seo` | `?company_description`, `?location` | `services.seo.getSeo` | 10 SEO keywords |
 
 No API versioning, no pagination, **no auth, no rate limiting, no input length limits**.
 Swagger UI auto-available at `/docs`.
@@ -180,36 +180,37 @@ Swagger UI auto-available at `/docs`.
 
 ## 6. Backend Component Notes (current behavior)
 
-- **`server.py`** — CORS `allow_origins=["*"]` + `allow_credentials=True` (invalid combo; browsers
-  reject). No auth/rate-limit/logging middleware. No real health check.
-- **`companies.py` `get_company_info(name, location, api_key)`** — Groq `llama-3.3-70b`, temp 0.3,
-  max_tokens 1000. Prompts for structured JSON (official_name, industry_type, headquarters,
+- **`main.py`** — CORS `allow_origins=["*"]` + `allow_credentials=True` (preserved from before; invalid
+  combo on paper but fine for the current no-credentials frontend). No auth/rate-limit/logging middleware.
+- **`core/groq.py`** — `getClient()` (shared Groq client) + `parseJson()` (strip ```` ```json ```` fences →
+  `json.loads`). Used by company/analysis/taglines/seo — the fragile JSON parsing now lives in **one place**.
+- **`services/company.py` `getCompanyInfo(name, location, api_key)`** — Groq `llama-3.3-70b`, temp 0.3,
+  max_tokens 1000. Structured-JSON prompt (official_name, industry_type, headquarters,
   key_products_services[], website, competitors[5]). LLM knowledge only; no web search; no retry.
-  JSON parsed by regex-stripping ```` ```json ```` fences → fragile.
-- **`analysis.py` `companies_analysis(company_info, api_key)`** — top 3 companies → Groq → SWOT
-  per company. Ungrounded; same fragile JSON parsing.
-- **`services/chat_service.py`** (medical RAG) — HF `all-MiniLM-L6-v2` (384-D) → Pinecone `chatbot1`,
-  `k=3` → LangChain RetrievalQA → Groq `deepseek-r1-distill-llama-70b` → strip `<think>`. System
-  prompt: answer only from context, ≤3 sentences. **Re-initializes embeddings + index on EVERY
-  request** (slow/wasteful). Knowledge-base PDFs are NOT in the repo; index must pre-exist.
-- **`services/marketing_chatbot_service.py`** — identical to medical but Pinecone `chatbot2`,
-  `system_prompt2`.
-- **`services/seo_service.py` `get_seo(desc, location)`** — calls `get_company_info` then extracts
-  10 SEO keywords/company. LLM only; no Google Trends/web data.
-- **`services/generate_taglines.py`** — Groq `llama-3.3-70b` → exactly 5 `{name, TagLine}`.
+- **`services/analysis.py` `companiesAnalysis(company_info, api_key)`** — top 3 companies → Groq → SWOT.
+- **`services/chat.py`** (merged RAG) — `getChatResponse(msg, domain)` with
+  `INDEXES = {"medical": "chatbot1", "marketing": "chatbot2"}`. HF `all-MiniLM-L6-v2` (384-D) → Pinecone →
+  `k=3` → LangChain retrieval chain → Groq `deepseek-r1-distill-llama-70b` → strip `<think>`. Prompt:
+  `core/prompts.CHATBOT_SYSTEM_PROMPT` (the two formerly-identical prompts are now one). ⚠️ Still
+  **re-initializes embeddings + index on EVERY request** (ROADMAP 2.1). Indexes must pre-exist.
+- **`services/seo.py` `getSeo(desc, location)`** — fetches a company profile then 10 SEO keywords. LLM only.
+- **`services/taglines.py` `generateTaglines(desc, sector, api_key)`** — Groq `llama-3.3-70b` → 5 `{name, TagLine}`.
+- **`core/embeddings.py`** — `downloadHuggingFaceEmbeddings()` (still uses the deprecated
+  `from langchain.embeddings import HuggingFaceEmbeddings` import — ROADMAP 0.1).
 
 ---
 
 ## 7. Environment Variables
 
-**Backend (`ml/.env`, via `python-dotenv`)**
+**Backend (`backend/.env`, loaded by `app/config.py` via `python-dotenv`; template in `backend/.env.example`)**
 | Var | Used in | Purpose |
 |---|---|---|
 | `GROQ_API_KEY` | `config.py`, services | Groq LLM calls (required) |
-| `PINECONE_API_KEY` | chat services | Pinecone vector store |
-| `HUGGINGFACEHUB_API_TOKEN` | embeddings | HF embeddings |
-| `OPENAI_API_KEY` | — | present in `.env`, **appears unused** |
-| `REPLICATE_API_TOKEN` | — | present in `.env`, **appears unused** |
+| `PINECONE_API_KEY` | `services/chat.py` | Pinecone vector store |
+| `HUGGINGFACEHUB_API_TOKEN` | `core/embeddings.py` | HF embeddings download |
+
+> `OPENAI_API_KEY` / `REPLICATE_API_TOKEN` appeared in the *old* committed `.env` but were never used by
+> the code; their LangChain deps were removed in the refactor.
 
 **Frontend (`.env.local`, not in repo — set on Vercel)**
 ```
@@ -221,7 +222,7 @@ NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=
 NEXT_PUBLIC_FIREBASE_APP_ID=
 SMTP_EMAIL=        # Gmail address for contact form
 SMTP_PASSWORD=     # Gmail app password
-# (recommended, not yet used) NEXT_PUBLIC_API_URL=http://localhost:8000
+NEXT_PUBLIC_API_URL=http://localhost:8000   # consumed by lib/api.ts
 ```
 
 > 🔴 **Security:** real keys (Pinecone, OpenAI, HuggingFace, Groq, Replicate) were committed in
@@ -230,7 +231,7 @@ SMTP_PASSWORD=     # Gmail app password
 
 ---
 
-## 8. How to Run (corrected)
+## 8. How to Run
 
 **Frontend**
 ```bash
@@ -241,18 +242,17 @@ npm run dev        # http://localhost:3000  (uses --turbopack)
 
 **Backend**
 ```bash
-cd ml
+cd backend
 python -m venv venv && source venv/bin/activate   # Windows: venv\Scripts\activate
 pip install -r requirements.txt
-# Create ml/.env with GROQ_API_KEY (+ PINECONE_API_KEY, HUGGINGFACEHUB_API_TOKEN)
-uvicorn server:app --host 0.0.0.0 --port 8000 --reload   # NOT main:app
+cp .env.example .env   # then fill GROQ_API_KEY (+ PINECONE_API_KEY, HUGGINGFACEHUB_API_TOKEN)
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-> ⚠️ README says `uvicorn main:app` — **wrong**, there is no `main.py`; the entry is `server.py`.
-> ⚠️ The frontend hardcodes the Render URL, so a local backend isn't hit unless you change those
-> URLs (ROADMAP 0.5). No test suite, no CI.
+> ⚠️ The frontend reads `NEXT_PUBLIC_API_URL` via `lib/api.ts` (defaults to `http://localhost:8000`);
+> set it to point at a remote backend. No test suite, no CI.
 > ⚠️ RAG chatbots need pre-populated Pinecone indexes (`chatbot1`, `chatbot2`); no ingestion
-> script ships in the repo.
+> script ships in the repo (see ROADMAP 0.7).
 
 ---
 
@@ -304,6 +304,7 @@ serverless. No GPU (all inference via Groq cloud).
 | Firebase Auth | Free OAuth without a custom auth server |
 | Render / Vercel free tiers | Zero-cost demo hosting |
 | LLM-only competitor data | Bing Search pipeline existed at hackathon but was never committed |
+| One merged RAG service | Medical/marketing bots were identical bar the index → parameterized by domain |
 
 ---
 
@@ -311,10 +312,13 @@ serverless. No GPU (all inference via Groq cloud).
 
 Top risks (full detail + executable fixes in ROADMAP.md):
 1. 🔴 **Leaked API keys in git history** (`ml/.env`) — rotate all + scrub history.
-2. 🟠 **CORS** `*` + credentials — invalid/insecure.
+2. 🟠 **CORS** `*` + credentials (`main.py`) — preserved; lock down for prod.
 3. 🟠 **No auth/rate-limit** on paid LLM endpoints — cost & abuse risk.
-4. 🟠 **Hardcoded backend URL** across frontend — not configurable.
-5. 🟠 **Unpinned Python deps** (+ duplicate line) — non-reproducible builds.
-6. 🟡 **Bare `except`** leaking errors; **fragile LLM JSON parsing**; **RAG re-init per request**.
-7. ❌ Missing: `/dashboard` + route guards, live web search, conversation memory, tests/CI/Docker, observability.
+4. 🟠 **Unpinned Python deps** — duplicate + unused removed, but still need `==` pinning.
+5. 🟡 **Bare `except`** (`routers/company.py`); **fragile LLM JSON parsing** (now centralized in `core/groq.py`); **RAG re-init per request** (`services/chat.py`).
+6. ❌ Missing: `/dashboard` + route guards, live web search, conversation memory, tests/CI/Docker, observability.
+
+> ✅ Resolved by the restructure: hardcoded backend URL (now `lib/api.ts`), duplicate `langchain-pinecone`,
+> unused deps, `react-router-dom`, README run command, `SWOTAnaylis` typo (file was dead → deleted),
+> scratch notebooks / `egg-info` / `model.pkl`.
 ```

@@ -22,19 +22,19 @@
 
 # PHASE 0 — GET IT RUNNING LOCALLY  *(the immediate goal)*
 
-> Target end state: `uvicorn server:app` serves the API on `:8000`, `npm run dev` serves the UI on
-> `:3000`, the UI calls **your local** backend, and every feature returns a real response.
+> Target end state: `uvicorn main:app` (from `backend/`) serves the API on `:8000`, `npm run dev`
+> serves the UI on `:3000`, the UI calls **your local** backend, and every feature returns a real response.
 
 ## 0.1 Backend install is non-reproducible and may fail outright  `Effort: S · P0`
-**Issue:** `ml/requirements.txt` is fully unpinned, lists `langchain-pinecone` twice, and the code
-uses a deprecated import (`from langchain.embeddings import HuggingFaceEmbeddings` in
-`ml/chat/src/helper.py`) that newer LangChain removed — so a fresh `pip install` can pull
-incompatible versions and the app can crash on import.
+**Issue:** `backend/requirements.txt` is still fully unpinned (the duplicate `langchain-pinecone`
+and the unused deps were already removed in the refactor), and the code still uses a deprecated import
+(`from langchain.embeddings import HuggingFaceEmbeddings` in `backend/app/core/embeddings.py`) that
+newer LangChain removed — so a fresh `pip install` can pull incompatible versions and crash on import.
 
 **How we'll solve it:**
 1. Create a clean venv and install the *current* loose set once to discover a working combination:
    ```bash
-   cd ml
+   cd backend
    python -m venv venv && source venv/bin/activate   # Windows: venv\Scripts\activate
    pip install -r requirements.txt
    ```
@@ -42,21 +42,20 @@ incompatible versions and the app can crash on import.
    ```bash
    pip install langchain-huggingface
    ```
-   Then edit `ml/chat/src/helper.py`:
+   Then edit `backend/app/core/embeddings.py`:
    ```python
    # before
    from langchain.embeddings import HuggingFaceEmbeddings
    # after
    from langchain_huggingface import HuggingFaceEmbeddings
    ```
-3. Once the server boots and a request succeeds, **freeze** the exact working versions and dedupe:
+3. Once the server boots and a request succeeds, **pin** the exact working versions:
    ```bash
    pip freeze > requirements.lock.txt
    ```
-   Rewrite `ml/requirements.txt` to pin every direct dependency with `==` (copy versions from the
-   lockfile), remove the duplicate `langchain-pinecone`, and add `langchain-huggingface==<ver>`.
-   Keep only what's imported (drop `pandas`, `pypdf`, `langchain-openai`, `langchain-experimental`
-   if `grep -rn "import pandas\|pypdf\|langchain_openai\|langchain_experimental" ml/` is empty).
+   Rewrite `backend/requirements.txt` to pin every direct dependency with `==` (copy versions from the
+   lockfile) and add `langchain-huggingface==<ver>` if you switched the import in step 2.
+   (The duplicate `langchain-pinecone` and unused deps were already removed in the refactor.)
 4. Acceptance: delete the venv, recreate it, `pip install -r requirements.txt`, and the server
    starts with no import errors.
 
@@ -64,36 +63,36 @@ incompatible versions and the app can crash on import.
 
 ## 0.2 Backend needs valid API keys (and the old ones are compromised)  `Effort: S · P0`
 **Issue:** The backend needs `GROQ_API_KEY`, `PINECONE_API_KEY`, `HUGGINGFACEHUB_API_TOKEN` in
-`ml/.env`. The previously committed keys leaked into git history and must not be reused.
+`backend/.env`. The previously committed keys leaked into git history and must not be reused.
 
 **How we'll solve it:**
 1. Generate **fresh** keys: Groq (`console.groq.com/keys`), Pinecone (`app.pinecone.io`),
    HuggingFace (`huggingface.co/settings/tokens`, read scope is enough for model download).
-2. Create `ml/.env` (already git-ignored):
+2. Create `backend/.env` (already git-ignored; template in `backend/.env.example`):
    ```env
    GROQ_API_KEY=gsk_...
    PINECONE_API_KEY=pcsk_...
    HUGGINGFACEHUB_API_TOKEN=hf_...
    # OPENAI_API_KEY / REPLICATE_API_TOKEN: leave out — not used by current code
    ```
-3. Sanity check they load: `cd ml && python -c "import config; print(bool(config.GROQ_API_KEY))"`
+3. Sanity check they load: `cd backend && python -c "from app.config import GROQ_API_KEY; print(bool(GROQ_API_KEY))"`
    should print `True`.
 4. (Full rotation/history scrub of the *old* keys is **Phase 1.1** — for running locally, new keys are enough.)
 
 **Impact:** The LLM features (company lookup, SWOT, taglines, SEO) can return real data locally.
 
-## 0.3 Run the backend with the correct entrypoint  `Effort: S · P0`
-**Issue:** README says `uvicorn main:app`, but there is no `main.py`; the app lives in `server.py`.
+## 0.3 Run the backend  `Effort: S · P0` ✅ *entrypoint resolved in the refactor*
+**Issue:** (was) a README/entry mismatch. The entry is now `backend/main.py` and the README is fixed,
+so `uvicorn main:app` is correct.
 
 **How we'll solve it:**
 1. Run:
    ```bash
-   cd ml && source venv/bin/activate
-   uvicorn server:app --host 0.0.0.0 --port 8000 --reload
+   cd backend && source venv/bin/activate
+   uvicorn main:app --host 0.0.0.0 --port 8000 --reload
    ```
 2. Verify: open `http://localhost:8000/docs` (Swagger) and `GET http://localhost:8000/api/home`
    returns the hello/team JSON.
-3. Fix the README now so nobody hits this again (`README.md:55`: `main:app` → `server:app`).
 
 **Impact:** Backend boots first try; onboarding stops failing at step one.
 
@@ -123,38 +122,25 @@ incompatible versions and the app can crash on import.
 
 **Impact:** Auth pages, contact email, and API calls all have the config they need to function.
 
-## 0.5 Point the frontend at YOUR local backend (centralize the URL)  `Effort: S · P0`
-**Issue:** `https://dotslash-backend.onrender.com` is hardcoded in 5 components, so `npm run dev`
-always hits the (cold-starting, possibly dead) Render box instead of your local backend. Exact sites:
-`Analysis.tsx:132`, `Chatbot.tsx:256`, `ChatbotSmall.tsx:109`, `CompanyInput.tsx:72`,
-`StartForm.tsx:53` (which defines its own `const API_BASE_URL`).
+## 0.5 Point the frontend at YOUR local backend (centralize the URL)  `Effort: S · P0` ✅ *done in the refactor*
+**Issue:** (was) `https://dotslash-backend.onrender.com` hardcoded in 5 components.
 
-**How we'll solve it:**
-1. Create one source of truth:
-   ```ts
-   // frontend/src/lib/api.ts
-   export const API_BASE_URL =
-     process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-   ```
-2. In each of the 5 files, import it and replace the literal:
-   ```ts
-   import { API_BASE_URL } from "@/lib/api";
-   // fetch(`${API_BASE_URL}/company?company=...`)  etc.
-   ```
-   In `StartForm.tsx`, delete the local `const API_BASE_URL = '...'` (line 53) and import the shared one.
-3. Confirm none remain: `grep -rn "dotslash-backend.onrender.com" frontend/src` → no results.
-4. Acceptance: with the backend running and `NEXT_PUBLIC_API_URL=http://localhost:8000`, a company
-   search in the UI shows the request hitting `localhost:8000` in the Network tab.
+**Done:** `frontend/src/lib/api.ts` exports `API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ??
+"http://localhost:8000"`, and all 5 call sites (Analysis, Chatbot, ChatbotSmall, CompanyInput,
+StartForm — now under `components/<feature>/`) import it. No `dotslash-backend` literal remains.
 
-**Impact:** Local dev actually exercises local code; switching environments (local/staging/Render) is one env var, not a code edit.
+**Remaining:** just set `NEXT_PUBLIC_API_URL=http://localhost:8000` in `frontend/.env.local` (0.4).
+Acceptance: a company search shows the request hitting `localhost:8000` in the Network tab.
+
+**Impact:** Local dev exercises local code; switching environments is one env var, not a code edit.
 
 ## 0.6 Make CORS accept your local frontend  `Effort: S · P0`
-**Issue:** `server.py` sets `allow_origins=["*"]` **with** `allow_credentials=True` — an invalid
-combination the browser rejects, so any credentialed request from `:3000` can be blocked.
+**Issue:** `backend/main.py` sets `allow_origins=["*"]` **with** `allow_credentials=True` — an invalid
+combination on paper. It works for the current frontend (no credentials sent), but tighten it anyway.
 
 **How we'll solve it (minimal version to unblock dev; full lockdown is 1.2):**
 ```python
-# ml/server.py
+# backend/main.py
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000"],
@@ -179,18 +165,18 @@ chatbots return errors or empty answers. The PDFs/data that built them are **not
 - **Path B — you need to (re)create them:** write a one-off ingestion script (this is the seed of
   the reproducible pipeline in **3.4**):
   ```python
-  # ml/chat/ingest.py
+  # backend/ingest.py
   import os
   from dotenv import load_dotenv
   from langchain_community.document_loaders import DirectoryLoader, PyPDFLoader
   from langchain.text_splitter import RecursiveCharacterTextSplitter
   from langchain_pinecone import PineconeVectorStore
   from pinecone import Pinecone, ServerlessSpec
-  from chat.src.helper import download_hugging_face_embeddings
+  from app.core.embeddings import downloadHuggingFaceEmbeddings
 
   load_dotenv()
   INDEX = "chatbot1"          # run again with "chatbot2" for marketing
-  DATA_DIR = "ml/chat/data"   # put your source PDFs here
+  DATA_DIR = "data"           # put your source PDFs here (backend/data/)
 
   pc = Pinecone(api_key=os.environ["PINECONE_API_KEY"])
   if INDEX not in [i["name"] for i in pc.list_indexes()]:
@@ -199,10 +185,10 @@ chatbots return errors or empty answers. The PDFs/data that built them are **not
 
   docs = DirectoryLoader(DATA_DIR, glob="*.pdf", loader_cls=PyPDFLoader).load()
   chunks = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50).split_documents(docs)
-  PineconeVectorStore.from_documents(chunks, download_hugging_face_embeddings(), index_name=INDEX)
+  PineconeVectorStore.from_documents(chunks, downloadHuggingFaceEmbeddings(), index_name=INDEX)
   print(f"Ingested {len(chunks)} chunks into {INDEX}")
   ```
-  Run: `cd ml && python -m chat.ingest`. (Embedding dim must be **384** to match `all-MiniLM-L6-v2`.)
+  Run: `cd backend && python ingest.py`. (Embedding dim must be **384** to match `all-MiniLM-L6-v2`.)
 - **Path C — defer chatbots:** if you only want the LLM features running today, skip this; the four
   Groq features (0.2) work without Pinecone. Mark chatbots "Coming soon" in the UI.
 
@@ -250,7 +236,7 @@ tree but recoverable from history — assume all old keys are compromised.
 
 **How we'll solve it:** make the allow-list env-driven so local/staging/prod differ by config only:
 ```python
-# ml/server.py
+# backend/main.py
 import os
 origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
 app.add_middleware(CORSMiddleware,
@@ -262,32 +248,32 @@ domain succeed; requests from a random origin are blocked.
 
 **Impact:** Prevents arbitrary sites from driving your paid backend from a user's browser.
 
-## 1.3 No `.env.example` for onboarding  `Effort: S · P2`
+## 1.3 `.env.example` for onboarding  `Effort: S · P2` (backend ✅ done)
 **Issue:** New devs (and future-you) don't know which env vars exist without reading code.
 
-**How we'll solve it:** commit `ml/.env.example` and `frontend/.env.example` containing every key
-from §0.2/§0.4 with **empty** values and a one-line comment each. Reference them in the README.
+**How we'll solve it:** `backend/.env.example` is committed. Still add `frontend/.env.example` with
+every key from §0.4 (empty values + a one-line comment each), and reference both in the README.
 
 **Impact:** Frictionless setup; no more "which vars do I need?"
 
 ## 1.4 Bare `except` leaks internal errors  `Effort: S · P2 🟡`
-**Issue:** `/company` (`server.py:40-43`) catches everything and returns `{"error": str(e)}` with
-HTTP 200 — leaks internals and lies about success.
+**Issue:** `/company` (`backend/app/routers/company.py`, `getCompanyDetails`) catches everything and
+returns `{"error": str(e)}` with HTTP 200 — leaks internals and lies about success.
 
 **How we'll solve it:**
 ```python
 import logging
 log = logging.getLogger("luminary")
 
-@app.get("/company")
-def get_company_details(company: str, location: str):
+@router.get("/company")
+def getCompanyDetails(company: str, location: str):
     try:
         ...
-        return company_info
+        return getCompanyInfo(company, location, api_key=GROQ_API_KEY)
     except HTTPException:
         raise
     except Exception:
-        log.exception("get_company_details failed")
+        log.exception("getCompanyDetails failed")
         raise HTTPException(status_code=502, detail="Failed to fetch company info")
 ```
 Match the pattern `/companies-analysis` already uses (raise `HTTPException`). Acceptance: a forced
@@ -296,13 +282,14 @@ failure returns a non-200 status with a generic message; the stack trace appears
 **Impact:** No information leakage; clients get correct status codes; easier debugging via logs.
 
 ## 1.5 Fragile LLM JSON parsing  `Effort: M · P2 🟡`
-**Issue:** `companies.py` and `analysis.py` regex-strip ```` ```json ```` fences then `json.loads`,
-which throws on any malformed model output → 500s.
+**Issue:** `core/groq.py parseJson()` (used by company/analysis/taglines/seo) regex-strips ```` ```json ````
+fences then `json.loads`, which throws on any malformed model output → 500s. It's now in **one place**,
+so the fix lands once.
 
 **How we'll solve it:**
 1. Ask Groq for strict JSON: pass `response_format={"type": "json_object"}` in the chat completion call.
 2. Define Pydantic models for the expected shapes (e.g. `Company`, `CompetitorList`, `SwotList`) and
-   parse with `Model.model_validate_json(raw)`.
+   parse with `Model.model_validate_json(raw)` inside (or alongside) `parseJson`.
 3. Wrap in a retry-once-then-fallback: on `ValidationError`, retry the call once with a "return only
    valid JSON" reminder; if it still fails, return a structured error, not a crash.
 
@@ -313,27 +300,26 @@ which throws on any malformed model output → 500s.
 # PHASE 2 — RELIABILITY & CORE UX
 
 ## 2.1 RAG re-initializes on every request  `Effort: S · P1 🟡`
-**Issue:** `chat_service.get_response()` calls `load_dotenv()`, downloads the embedding model, and
-re-opens the Pinecone index on **every** message (see `ml/services/chat_service.py:12-41`) — adds
-seconds and memory churn per call. Same in `marketing_chatbot_service.py`.
+**Issue:** `services/chat.py _answer()` downloads the embedding model and re-opens the Pinecone index
+on **every** message (`backend/app/services/chat.py`). Now that both bots share this one service, the
+fix is single-site.
 
 **How we'll solve it:** build the heavy objects once at startup and reuse them.
 ```python
-# ml/server.py
+# backend/main.py
 from contextlib import asynccontextmanager
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    from chat.src.helper import download_hugging_face_embeddings
-    app.state.embeddings = download_hugging_face_embeddings()   # load model ONCE
+    from app.core.embeddings import downloadHuggingFaceEmbeddings
+    app.state.embeddings = downloadHuggingFaceEmbeddings()   # load model ONCE
     yield
 
 app = FastAPI(lifespan=lifespan)
 ```
-Refactor `chat_service` to accept the shared `embeddings` (and a cached retriever/chain per index)
-instead of rebuilding them. Keep `from_existing_index` results cached in a module-level dict keyed by
-index name. Acceptance: second chatbot request is markedly faster than the first; embeddings load
-appears once in logs.
+Refactor `services/chat.py` to accept the shared `embeddings` and cache the retriever/chain per index
+(a module-level dict keyed by index name) instead of rebuilding them. Acceptance: the second chatbot
+request is markedly faster than the first; the embeddings load appears once in logs.
 
 **Impact:** Chatbot latency drops to mostly the Groq round-trip; lower memory thrash; fewer cold-path bugs.
 
@@ -346,7 +332,7 @@ is cosmetic — the backend verifies nothing.
    git-ignored).
 2. Add a dependency that verifies the Firebase ID token:
    ```python
-   # ml/auth.py
+   # backend/app/auth.py
    from fastapi import Depends, HTTPException, Header
    from firebase_admin import auth, credentials, initialize_app
    initialize_app(credentials.Certificate(os.environ["FIREBASE_CREDENTIALS"]))
@@ -427,17 +413,19 @@ warm-up ping.
 # PHASE 3 — DATA, GROUNDING & INTELLIGENCE  *(makes the product real, not a demo)*
 
 ## 3.1 Competitor/SWOT data is ungrounded LLM guesswork  `Effort: M · P2`
-**Issue:** `companies.py`/`analysis.py` rely solely on LLM training knowledge — stale past cutoff and
-prone to hallucination, with no citations. This is the core value prop and it's currently unreliable.
+**Issue:** `services/company.py`/`services/analysis.py` rely solely on LLM training knowledge — stale
+past cutoff and prone to hallucination, with no citations. This is the core value prop and it's
+currently unreliable.
 
 **How we'll solve it:**
 1. Add a search provider (Tavily is simplest for LLM use; SerpAPI/Bing are alternatives). Store
    `TAVILY_API_KEY` in `.env`.
-2. New `ml/services/search_service.py`: query "{company} competitors {location}" and recent news;
+2. New `backend/app/services/search.py`: query "{company} competitors {location}" and recent news;
    collect top results (title, snippet, url).
 3. Feed those snippets into the Groq prompt as grounding context and instruct the model to base the
    JSON on them and **include source URLs** per competitor/claim.
-4. Surface citations in `Analysis.tsx`/`SWOTAnalysis` so users see where facts came from.
+4. Surface citations in `components/company/Analysis.tsx` (which renders the SWOT inline) so users see
+   where facts came from.
 
 **Impact:** Current, defensible, citable analysis — turns the headline feature from "plausible-sounding" into "trustworthy."
 
@@ -463,9 +451,9 @@ on the frontend consume the stream and append tokens to the message bubble as th
 **Issue:** Pinecone indexes must pre-exist; there's no committed way to rebuild them (see 0.7 Path B).
 
 **How we'll solve it:** promote the 0.7 ingestion script to a documented, parameterized CLI
-(`python -m chat.ingest --index chatbot1 --data ./data/medical --recreate`), commit the **source
-docs** (or a fetch script) under `ml/chat/data/`, and document the steps in the README so anyone can
-rebuild the knowledge base from scratch.
+(`python ingest.py --index chatbot1 --data ./data/medical --recreate`), commit the **source docs**
+(or a fetch script) under `backend/data/`, and document the steps in the README so anyone can rebuild
+the knowledge base from scratch.
 
 **Impact:** RAG is recoverable and onboardable; deleting an index is no longer catastrophic.
 
@@ -511,7 +499,7 @@ Pinecone so tests are offline and free) + unit tests for the JSON parsing/valida
 ## 4.3 No containerization  `Effort: M · P3`
 **Issue:** No one-command local stack; "works on my machine" deploy drift.
 
-**How we'll solve it:** `ml/Dockerfile` (slim Python, pinned deps, pre-download the embedding model
+**How we'll solve it:** `backend/Dockerfile` (slim Python, pinned deps, pre-download the embedding model
 into the image to avoid first-request lag) + root `docker-compose.yml` running backend + frontend
 (+ Postgres from 3.5) together.
 
@@ -531,11 +519,11 @@ logging, and Sentry on both backend and frontend for error capture.
 
 ## 5.1 Finish or cut partially-built features  `Effort: S–M · P3`
 **Issue:** Several half-features confuse users: GitHub OAuth provider exists with no button; 3/4
-Sectors agents are "Coming Soon"; `/test` is a placeholder; chatbot quick-action buttons may not
-actually send a message.
+Sectors agents are "Coming Soon"; chatbot quick-action buttons may not actually send a message.
+(The `/test` debug page was already removed in the refactor.)
 **How we'll solve it:** either complete each (add the GitHub sign-in button wired to `githubProvider`;
 implement the 3 agents as simple Groq prompts; wire quick-actions to submit a pre-filled message) **or**
-remove them from the UI until ready. Delete `/test`.
+remove them from the UI until ready.
 **Impact:** No dead-ends or broken buttons; the product feels finished.
 
 ## 5.2 Mobile chatbot + accessibility  `Effort: M · P3`
@@ -555,12 +543,12 @@ small breakpoints); add ARIA labels, focus management, and keyboard nav to inter
 or a backend render endpoint).
 **Impact:** A shareable deliverable — a feature SME users actually want.
 
-## 5.5 Repo hygiene cleanups  `Effort: S · P3`
-**Issue:** Small professionalism gaps: `SWOTAnaylis.tsx` typo, unused `react-router-dom`, scratch
-notebooks (`ml/1.ipynb`, `ml/companies.ipynb`) in the app dir, README run command.
-**How we'll solve it:** rename `SWOTAnaylis.tsx` → `SWOTAnalysis.tsx` (update imports);
-`npm rm react-router-dom`; move notebooks to `ml/notebooks/` (or delete); fix `README.md:55`
-(`main:app` → `server:app`) if not already done in 0.3.
+## 5.5 Repo hygiene cleanups  `Effort: S · P3` ✅ *mostly done in the refactor*
+**Issue:** (was) `SWOTAnaylis.tsx` typo, unused `react-router-dom`, scratch notebooks, README run command.
+**Done:** `SWOTAnaylis.tsx` was dead code → deleted; `react-router-dom` removed; the three notebooks,
+the committed `egg-info/`, and `model.pkl` are gone; README path fixed (`cd backend`).
+**Remaining:** `package.json` still lists `@shadcn/ui` (a CLI, not a runtime dep) and
+`react-loading-skeleton` — verify usage and drop if unused.
 **Impact:** Cleaner, smaller, more credible repo.
 
 ## 5.6 Differentiators (big swings)  `Effort: L · P3`
